@@ -7,6 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -225,9 +226,13 @@ fun FrequencyDisplay(listener: Listener, selectedNote: MutableState<Note>) {
 
 @Composable
 fun NeedleDisplay(frequency: Double, targetNote: Note) {
-    val angle = targetNote
-        .getDistance(frequency)
-        .coerceIn(-1.0, 1.0) * 90f + 90f
+    val angle by animateFloatAsState(
+        targetNote
+            .getDistance(frequency)
+            .toFloat()
+            .coerceIn(-1f, 1f) * 90f + 90f,
+        label = "Needle Animation"
+    )
 
     Canvas(
         modifier = Modifier
@@ -292,18 +297,29 @@ fun DebugView(frequency: Double, targetFrequency: Double, points: List<Double>, 
     }
 }
 
-fun DrawScope.drawDisplay(angle: Double) {
+fun DrawScope.drawDisplay(angle: Float) {
     val strokeWidth = 20f
     val offset = strokeWidth / 2
     val radius = min(size.height, size.width / 2f)
+
+    // Draw center line
+    drawLine(
+        color = Color.Green,
+        start = Offset(size.width / 2, size.height),
+        end = Offset(
+            x = size.width / 2,
+            y = size.height - radius
+        ),
+        strokeWidth = 4f
+    )
 
     // Draw the needle
     drawLine(
         color = Color.Red,
         start = Offset(size.width / 2, size.height),
         end = Offset(
-            x = size.width / 2 + radius * kotlin.math.cos(Math.toRadians((180f - angle))).toFloat(),
-            y = size.height - radius * kotlin.math.sin(Math.toRadians((180f - angle))).toFloat()
+            x = size.width / 2 + radius * kotlin.math.cos(Math.toRadians((180.0 - angle.toDouble()))).toFloat(),
+            y = size.height - radius * kotlin.math.sin(Math.toRadians((180.0 - angle.toDouble()))).toFloat()
         ),
         strokeWidth = 8f
     )
