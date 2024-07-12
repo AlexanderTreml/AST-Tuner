@@ -35,7 +35,6 @@ class Listener () : ViewModel() {
     val maxima: MutableStateFlow<List<Int>> = MutableStateFlow(emptyList())
 
     private val bufferSize = getBufferSize()
-    private val window = getWindow(bufferSize)
 
     private val fft: FastFourierTransformer = FastFourierTransformer(DftNormalization.STANDARD)
     private var audioRecord: AudioRecord? = null
@@ -57,7 +56,7 @@ class Listener () : ViewModel() {
 
                     // Convert audioBuffer to fftBuffer
                     for (i in audioBuffer.indices) {
-                        fftBuffer[i] = audioBuffer[i].toDouble() * window[i]
+                        fftBuffer[i] = audioBuffer[i].toDouble()
                     }
 
                     val magnitudes = autocorrelation(fftBuffer)
@@ -68,7 +67,6 @@ class Listener () : ViewModel() {
 
                     val maxIndex = maxima.value.maxByOrNull { magnitudes[it] } ?: continue
 
-                    // TODO log scale for better accuracy?
                     val a = magnitudes[maxIndex - 1]
                     val b = magnitudes[maxIndex]
                     val c = magnitudes[maxIndex + 1]
@@ -140,23 +138,6 @@ class Listener () : ViewModel() {
 
         Log.d("Config", "Chose buffer size $result")
         return result
-    }
-
-    // Calculate gaussian window
-    // TODO necessary?
-    private fun getWindow(len: Int): DoubleArray {
-        // TODO choose sigma
-        val sigma = 1
-        val w = DoubleArray(len)
-
-        for (n in w.indices) {
-            val frac = ((n - len / 2 + 0.5)/ (sigma * len / 2))
-            w[n] = exp(-(1.0/2.0) * frac * frac)
-            // Include the scaling from 16-bit PCM to -1 to 1 in the window
-            w[n] = w[n] / 65535
-        }
-
-        return w
     }
 
     private suspend fun initializeAudioRecord(): Boolean {

@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.AlertDialog
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
@@ -52,7 +54,6 @@ import androidx.core.content.ContextCompat
 import com.alexander_treml.asttuner.ui.theme.ASTTunerTheme
 import kotlin.math.min
 
-// TODO license
 // TODO UI previews
 // TODO cleanly handle the transition from double precision in the backend to single precision in the UI
 // TODO use the theme (color scheme: https://material-foundation.github.io/material-theme-builder/)
@@ -127,7 +128,7 @@ class MainActivity : ComponentActivity() {
     private fun showPermissionDeniedDialog() {
         AlertDialog.Builder(this)
             .setTitle("Missing Permission")
-            .setMessage("The app needs the permission to record audio. Please grant the permission in settings.")
+            .setMessage("The app needs the permission to record audio. Please grant the permission in the settings.")
             .setPositiveButton("OK") { dialog, _ ->
                 dialog.dismiss()
             }
@@ -169,6 +170,9 @@ fun NoteButtons(note: Note, selectedNote: MutableState<Note>) {
         Button(
             onClick = { selectedNote.value = note },
             modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (selectedNote.value == note ) Color.Green else Color.Cyan,
+            ),
         ) {
             Text(note.name)
         }
