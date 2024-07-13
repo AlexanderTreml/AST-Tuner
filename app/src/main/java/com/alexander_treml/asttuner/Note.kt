@@ -54,4 +54,6 @@ class Note(private var distanceToReference: Int) {
             else -> "THIS SHOULD NOT HAPPEN"
         }
     }
+
+    override fun toString(): String = name
 }

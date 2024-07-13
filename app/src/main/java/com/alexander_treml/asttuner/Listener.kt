@@ -4,29 +4,21 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
-import androidx.collection.IntList
-import androidx.collection.MutableIntList
-import androidx.compose.animation.core.animateRectAsState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.apache.commons.math3.transform.DftNormalization
 import org.apache.commons.math3.transform.FastFourierTransformer
 import org.apache.commons.math3.transform.TransformType
-import kotlin.math.exp
-import kotlin.math.log
-import kotlin.math.log10
-import kotlin.math.max
 import kotlin.math.pow
-import kotlin.math.sin
 
 private const val SAMPLE_RATE = 44100
+private const val THRESHOLD = 1000
 
-class Listener () : ViewModel() {
+// TODO should this be a ViewModel?
+class Listener: ViewModel() {
     // Output value
     val frequency = MutableStateFlow(0.0)
 
@@ -39,11 +31,10 @@ class Listener () : ViewModel() {
     private val fft: FastFourierTransformer = FastFourierTransformer(DftNormalization.STANDARD)
     private var audioRecord: AudioRecord? = null
 
-    // TODO listening threshold (display if the signal amplitude is too low)
     // TODO code cleanup
     fun startListening() {
         viewModelScope.launch(Dispatchers.IO) {
-            if (!initializeAudioRecord() || audioRecord == null) return@launch
+            if (!initializeAudioRecord()) return@launch
 
             val audioBuffer = ShortArray(bufferSize)
             val fftBuffer = DoubleArray(bufferSize)
@@ -66,6 +57,12 @@ class Listener () : ViewModel() {
                     maxima.value = getLocalMaxima(magnitudes.sliceArray(0..bufferSize / 2))
 
                     val maxIndex = maxima.value.maxByOrNull { magnitudes[it] } ?: continue
+
+                    // TODO display if the signal amplitude is too low
+                    if (magnitudes[maxIndex] < THRESHOLD) {
+                        frequency.value = 0.0
+                        continue
+                    }
 
                     val a = magnitudes[maxIndex - 1]
                     val b = magnitudes[maxIndex]
@@ -136,30 +133,30 @@ class Listener () : ViewModel() {
             result *= 2
         }
 
-        Log.d("Config", "Chose buffer size $result")
+        Log.d("Listener", "Chose buffer size $result")
         return result
     }
 
-    private suspend fun initializeAudioRecord(): Boolean {
-        return withContext(Dispatchers.IO) {
-            try {
-                audioRecord = AudioRecord(
-                    MediaRecorder.AudioSource.MIC,
-                    SAMPLE_RATE,
-                    AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    bufferSize
-                )
-                true
-            } catch (e: SecurityException) {
-                // TODO handle this more carefully (display error or something)
-                false
-            }
+    private fun initializeAudioRecord(): Boolean {
+        return try {
+            // TODO use float format (needs to be adjusted in getBufferSize as well)
+            audioRecord = AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                SAMPLE_RATE,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+                bufferSize
+            )
+            true
+        } catch (e: SecurityException) {
+            // TODO handle this more carefully (display error or something)
+            false
         }
     }
 
     override fun onCleared() {
         super.onCleared()
+        Log.d("Listener", "Cleaning up...")
         audioRecord?.release()
     }
 }
