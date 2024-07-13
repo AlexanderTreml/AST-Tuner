@@ -4,8 +4,9 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -17,8 +18,11 @@ import kotlin.math.pow
 private const val SAMPLE_RATE = 44100
 private const val THRESHOLD = 1000
 
-// TODO should this be a ViewModel?
-class Listener: ViewModel() {
+class Listener(owner: LifecycleOwner): DefaultLifecycleObserver {
+    init {
+        owner.lifecycle.addObserver(this)
+    }
+
     // Output value
     val frequency = MutableStateFlow(0.0)
 
@@ -27,57 +31,52 @@ class Listener: ViewModel() {
     val maxima: MutableStateFlow<List<Int>> = MutableStateFlow(emptyList())
 
     private val bufferSize = getBufferSize()
+    private val audioBuffer = ShortArray(bufferSize)
+    private val fftBuffer = DoubleArray(bufferSize)
 
+    private val listenerScope = CoroutineScope(Dispatchers.IO)
     private val fft: FastFourierTransformer = FastFourierTransformer(DftNormalization.STANDARD)
     private var audioRecord: AudioRecord? = null
 
     // TODO code cleanup
-    fun startListening() {
-        viewModelScope.launch(Dispatchers.IO) {
+    fun start() {
+        listenerScope.launch(Dispatchers.IO) {
+            // TODO inform the user that something went wrong
             if (!initializeAudioRecord()) return@launch
 
-            val audioBuffer = ShortArray(bufferSize)
-            val fftBuffer = DoubleArray(bufferSize)
+            while (true) {
+                audioRecord?.read(audioBuffer, 0, bufferSize, AudioRecord.READ_BLOCKING)
 
-            audioRecord?.startRecording()
-
-            try {
-                while (true) {
-                    audioRecord?.read(audioBuffer, 0, bufferSize, AudioRecord.READ_BLOCKING)
-
-                    // Convert audioBuffer to fftBuffer
-                    for (i in audioBuffer.indices) {
-                        fftBuffer[i] = audioBuffer[i].toDouble()
-                    }
-
-                    val magnitudes = autocorrelation(fftBuffer)
-
-                    bins.value = magnitudes.sliceArray(0..bufferSize / 2).toList()
-                    // Find maxima in the first section of the autocorrelation
-                    maxima.value = getLocalMaxima(magnitudes.sliceArray(0..bufferSize / 2))
-
-                    val maxIndex = maxima.value.maxByOrNull { magnitudes[it] } ?: continue
-
-                    // TODO display if the signal amplitude is too low
-                    if (magnitudes[maxIndex] < THRESHOLD) {
-                        frequency.value = 0.0
-                        continue
-                    }
-
-                    val a = magnitudes[maxIndex - 1]
-                    val b = magnitudes[maxIndex]
-                    val c = magnitudes[maxIndex + 1]
-
-                    val peakEstimate = if ((a - 2 * b + c) != 0.0) {
-                        (1.0 / 2.0) * (a - c) / (a - 2 * b + c) + maxIndex
-                    } else {
-                        0.0 + maxIndex
-                    }
-
-                    frequency.value = SAMPLE_RATE / peakEstimate
+                // Convert PCM16 to Double
+                for (i in audioBuffer.indices) {
+                    fftBuffer[i] = audioBuffer[i].toDouble()
                 }
-            } finally {
-                audioRecord?.stop()
+
+                val magnitudes = autocorrelation(fftBuffer).sliceArray(0..bufferSize / 2)
+
+                bins.value = magnitudes.toList()
+                // Find maxima in the first section of the autocorrelation
+                maxima.value = getLocalMaxima(magnitudes)
+
+                val maxIndex = maxima.value.maxByOrNull { magnitudes[it] } ?: -1
+
+                // TODO display that the signal amplitude is too low
+                if (maxIndex == -1 || magnitudes[maxIndex] < THRESHOLD) {
+                    frequency.value = 0.0
+                    continue
+                }
+
+                val a = magnitudes[maxIndex - 1]
+                val b = magnitudes[maxIndex]
+                val c = magnitudes[maxIndex + 1]
+
+                val peakEstimate = if ((a - 2 * b + c) != 0.0) {
+                    (1.0 / 2.0) * (a - c) / (a - 2 * b + c) + maxIndex
+                } else {
+                    0.0 + maxIndex
+                }
+
+                frequency.value = SAMPLE_RATE / peakEstimate
             }
         }
     }
@@ -139,7 +138,6 @@ class Listener: ViewModel() {
 
     private fun initializeAudioRecord(): Boolean {
         return try {
-            // TODO use float format (needs to be adjusted in getBufferSize as well)
             audioRecord = AudioRecord(
                 MediaRecorder.AudioSource.MIC,
                 SAMPLE_RATE,
@@ -147,16 +145,20 @@ class Listener: ViewModel() {
                 AudioFormat.ENCODING_PCM_16BIT,
                 bufferSize
             )
+            audioRecord!!.startRecording()
             true
-        } catch (e: SecurityException) {
-            // TODO handle this more carefully (display error or something)
+        } catch (_: SecurityException) {
             false
         }
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        Log.d("Listener", "Cleaning up...")
-        audioRecord?.release()
+    override fun onPause(owner: LifecycleOwner) {
+        Log.d("Listener", "Paused...")
+        audioRecord?.stop()
+    }
+
+    override fun onResume(owner: LifecycleOwner) {
+        Log.d("Listener", "Resumed...")
+        audioRecord?.startRecording()
     }
 }

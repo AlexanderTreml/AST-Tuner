@@ -7,7 +7,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.Orientation
@@ -57,7 +56,7 @@ import kotlin.math.min
 // TODO cleanly handle the transition from double precision in the backend to single precision in the UI
 // TODO use the theme (color scheme: https://material-foundation.github.io/material-theme-builder/)
 class MainActivity : ComponentActivity() {
-    private val listener: Listener by viewModels<Listener>()
+    private val listener = Listener(this)
     private var tuning = Tuning()
 
     // The target note
@@ -81,9 +80,9 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Only start the listener routine if we have the necessary permissions
+        // Only start the listener if we have the necessary permissions
         handlePermissions {
-            listener.startListening()
+            listener.start()
         }
     }
 
