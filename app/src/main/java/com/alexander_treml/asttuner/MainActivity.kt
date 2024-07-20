@@ -73,37 +73,50 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             AppTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    Column {
-                        TuningPanel(
-                            modifier = Modifier
-                                .weight(1f)
-                                .border(
-                                    width = 2.dp,
-                                    color = MaterialTheme.colorScheme.onBackground,
-                                    shape = RoundedCornerShape(8.dp)
-                                )
-                                .clip(RoundedCornerShape(8.dp))
-                        )
-                        FrequencyDisplay(modifier = Modifier
-                            .border(
-                                width = 2.dp,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .clip(RoundedCornerShape(8.dp))
-                        )
-                    }
-                }
+                MainPanel()
             }
         }
 
         // Only start the listener if we have the necessary permissions
         handlePermissions {
             listener.start()
+        }
+    }
+
+    @Composable
+    fun MainPanel() {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .border(
+                        width = 5.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .clip(RoundedCornerShape(8.dp)),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                Column {
+                    TuningPanel(
+                        modifier = Modifier
+                            .weight(1f)
+
+                    )
+                    FrequencyDisplay(
+                        modifier = Modifier
+                            .border(
+                                width = 5.dp,
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .clip(RoundedCornerShape(8.dp))
+                    )
+                }
+            }
         }
     }
 
@@ -146,7 +159,7 @@ class MainActivity : ComponentActivity() {
             if (debugMode) {
                 DebugView(frequency)
             } else {
-                NeedleDisplay(frequency, arcColor = MaterialTheme.colorScheme.primary)
+                NeedleDisplay(frequency, arcColor = MaterialTheme.colorScheme.onBackground)
             }
         }
 
@@ -184,14 +197,9 @@ class MainActivity : ComponentActivity() {
                 colors = ButtonDefaults.buttonColors(
                     containerColor =
                         if (selectedNote == note )
-                            MaterialTheme.colorScheme.primary
+                            MaterialTheme.colorScheme.secondary
                         else
-                            MaterialTheme.colorScheme.secondary,
-                    contentColor =
-                        if (selectedNote == note )
-                            MaterialTheme.colorScheme.onPrimary
-                        else
-                            MaterialTheme.colorScheme.onSecondary
+                            MaterialTheme.colorScheme.primary,
                 ),
             ) {
                 Text(note.name)
@@ -224,8 +232,9 @@ class MainActivity : ComponentActivity() {
             modifier = Modifier.aspectRatio(2f)
         ) {
             val strokeWidth = 10f
+            val padding = 18f
             val offset = strokeWidth / 2
-            val radius = min(size.height, size.width / 2f)
+            val radius = min(size.height, size.width / 2f) - padding
 
             // Draw center line
             drawLine(
@@ -275,8 +284,8 @@ class MainActivity : ComponentActivity() {
                 startAngle = 175f,
                 sweepAngle = 190f,
                 useCenter = false,
-                topLeft = Offset(offset, offset),
-                size = Size(size.width - strokeWidth, (size.height - strokeWidth) * 2),
+                topLeft = Offset(offset + padding, offset + padding),
+                size = Size(size.width - strokeWidth - 2 * padding, (size.height - strokeWidth - 2 * padding) * 2),
                 style = Stroke(strokeWidth)
             )
         }
@@ -389,31 +398,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun AppPreview() {
         AppTheme {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background
-            ) {
-                Column {
-                    TuningPanel(
-                        modifier = Modifier
-                            .weight(1f)
-                            .border(
-                                width = 2.dp,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .clip(RoundedCornerShape(8.dp))
-                    )
-                    FrequencyDisplay(modifier = Modifier
-                        .border(
-                            width = 2.dp,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                        .clip(RoundedCornerShape(8.dp))
-                    )
-                }
-            }
+            MainPanel()
         }
     }
 }
