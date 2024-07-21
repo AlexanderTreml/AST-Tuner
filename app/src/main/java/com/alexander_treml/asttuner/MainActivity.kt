@@ -8,33 +8,35 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Create
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,22 +47,120 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.alexander_treml.asttuner.ui.theme.AppTheme
+import kotlinx.coroutines.delay
+import kotlin.math.absoluteValue
 import kotlin.math.min
 
-// TODO fix swipe bug that causes button issues
-// TODO cleanly handle the transition from double precision in the backend to single precision in the UI
-// TODO better color theme (also check color scheme for accessibility)
-// TODO reuse modifiers
+// Constants
+private const val AUTO_DELAY = 500L
+
+private val PADDING = 8.dp
+private val BORDER_WIDTH = 4.dp
+private val OUTLINE_WIDTH = 2.dp
+private val BORDER_RADIUS = 8.dp
+
+private val Brass0 = Color(0xFFC9851E)
+private val Brass1 = Color(0xFFDB9932)
+
+private val Silver0 = Color(0xFFA8A8A8)
+private val Silver1 = Color(0xFFFFFEFE)
+
+private val Gray0 = Color(0xFF000000)
+private val Gray1 = Color(0xFF242424)
+
+private val Highlight = Color(0x61FFFFFF)
+
+// Brushes
+val brassBrush = Brush.linearGradient(
+    listOf(Brass0, Brass1),
+    end = Offset(40f, 40f),
+    tileMode = TileMode.Mirror
+)
+
+val silverBrush = Brush.linearGradient(
+    listOf(Silver0, Silver1),
+    end = Offset(80f, 70f),
+    tileMode = TileMode.Mirror
+)
+
+val backgroundBrush = Brush.linearGradient(
+    listOf(Gray0, Gray1),
+    end = Offset(5f, 5f),
+    tileMode = TileMode.Repeated
+)
+
+val outlineBrush = Brush.verticalGradient(
+    listOf(Color.Transparent, Color.Black.copy(alpha = 0.65f))
+)
+
+val outlineBrushPressed = Brush.verticalGradient(
+    listOf(Color.Black.copy(alpha = 0.45f), Color.Black.copy(alpha = 0.65f))
+)
+
+// Pre-allocate modifiers
+val backgroundMod = Modifier
+    .background(brush = backgroundBrush)
+
+val borderMod = backgroundMod
+    .border(
+        BorderStroke(BORDER_WIDTH, brassBrush),
+        shape = RoundedCornerShape(BORDER_RADIUS)
+    )
+    .padding(BORDER_WIDTH)
+    .clip(RoundedCornerShape(BORDER_RADIUS))
+
+
+val panelMod = backgroundMod
+    .padding(PADDING)
+
+val dividerMod = Modifier
+    .background(brush = brassBrush)
+
+val mainButtonMod = Modifier
+    .padding(PADDING)
+    .background(brassBrush, shape = RoundedCornerShape(BORDER_RADIUS))
+    .border(BorderStroke(OUTLINE_WIDTH, outlineBrush), shape = RoundedCornerShape(BORDER_RADIUS))
+val mainButtonSelectedMod = Modifier
+    .padding(PADDING)
+    .background(brassBrush, shape = RoundedCornerShape(BORDER_RADIUS))
+    .border(
+        BorderStroke(OUTLINE_WIDTH, outlineBrushPressed),
+        shape = RoundedCornerShape(BORDER_RADIUS)
+    )
+    .background(Highlight, shape = RoundedCornerShape(BORDER_RADIUS))
+
+val sideButtonMod = Modifier
+    .padding(PADDING)
+    .background(silverBrush, shape = RoundedCornerShape(BORDER_RADIUS))
+    .border(BorderStroke(OUTLINE_WIDTH, outlineBrush), shape = RoundedCornerShape(BORDER_RADIUS))
+val sideButtonSelectedMod = Modifier
+    .padding(PADDING)
+    .background(silverBrush, shape = RoundedCornerShape(BORDER_RADIUS))
+    .border(
+        BorderStroke(OUTLINE_WIDTH, outlineBrushPressed),
+        shape = RoundedCornerShape(BORDER_RADIUS)
+    )
+
+
+// TODO fix bug that causes button issue
+// TODO code cleanup and ui optimization
+// TODO adjust splash screen color
+// TODO write tests?
+// TODO use theme?
 class MainActivity : ComponentActivity() {
     private val listener = Listener(this)
     private var tuning = Tuning()
@@ -68,13 +168,15 @@ class MainActivity : ComponentActivity() {
     // The target note
     private var selectedNote by mutableStateOf(tuning.notes[0])
 
+    // Auto selection
+    private var auto by mutableStateOf(false)
+    private var probableNote by mutableStateOf<Note?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         setContent {
-            AppTheme {
-                MainPanel()
-            }
+            MainPanel()
         }
 
         // Only start the listener if we have the necessary permissions
@@ -86,51 +188,90 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun MainPanel() {
         Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
+            color = Gray0
         ) {
             Surface(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .border(
-                        width = 5.dp,
-                        color = MaterialTheme.colorScheme.primary,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                    .clip(RoundedCornerShape(8.dp)),
-                color = MaterialTheme.colorScheme.background
+                modifier = borderMod,
             ) {
                 Column {
+                    Toolbar(
+                        modifier = panelMod
+                    )
                     TuningPanel(
-                        modifier = Modifier
-                            .weight(1f)
-
+                        modifier = panelMod.weight(1f)
+                    )
+                    HorizontalDivider(
+                        thickness = BORDER_WIDTH,
+                        color = Color.Transparent,
+                        modifier = dividerMod
                     )
                     FrequencyDisplay(
-                        modifier = Modifier
-                            .border(
-                                width = 5.dp,
-                                color = MaterialTheme.colorScheme.primary,
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .clip(RoundedCornerShape(8.dp))
+                        modifier = backgroundMod
                     )
                 }
             }
         }
     }
 
-    // TODO allow passing modifiers like here whenever it makes sense
+    @Composable
+    fun Toolbar(modifier: Modifier = Modifier) {
+        Row(
+            modifier = modifier,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val autoMod =
+                if (auto)
+                    sideButtonSelectedMod.weight(0.25f)
+                else
+                    sideButtonMod.weight(0.25f)
+
+            IconButton(
+                onClick = { auto = !auto },
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.Transparent,
+                    contentColor =
+                    if (auto)
+                        Color.Green
+                    else
+                        Color.Black
+                ),
+                modifier = autoMod
+            ) {
+                Text(text = "A", fontSize = 24.sp, fontWeight = FontWeight(600))
+            }
+
+            Button(
+                onClick = { },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = Color.Black
+                ),
+                modifier = mainButtonMod.weight(1f)
+            ) {
+                Text(text = "Tuning")
+            }
+
+            IconButton(
+                onClick = { },
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = Color.Black
+                ),
+                modifier = sideButtonMod.weight(0.25f)
+            ) {
+                Icon(Icons.Filled.Create, contentDescription = "Rename tuning")
+            }
+        }
+    }
+
     // Create a column of buttons, one for each note in the tuning
     @Composable
-    fun TuningPanel(modifier: Modifier) {
+    fun TuningPanel(modifier: Modifier = Modifier) {
         Column(
             modifier = modifier,
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             tuning.notes.forEach { note ->
-                NoteButtons(note, Modifier.padding(8.dp))
+                NoteButtons(note)
             }
         }
     }
@@ -138,9 +279,27 @@ class MainActivity : ComponentActivity() {
     // Display the listener results
     // Has a debug mode to see the internal processing
     @Composable
-    fun FrequencyDisplay(modifier: Modifier) {
+    fun FrequencyDisplay(modifier: Modifier = Modifier) {
         val frequency by listener.frequency.collectAsState()
         var debugMode by remember { mutableStateOf(false) }
+
+        val detectedNote = tuning.notes.minBy { it.getDistance(frequency).absoluteValue }
+        probableNote =
+            if (auto && frequency != 0.0 && detectedNote.getDistance(frequency).absoluteValue < 3) {
+                detectedNote
+            } else {
+                null
+            }
+
+        // This will re-launch if probableNote changes
+        LaunchedEffect(probableNote) {
+            probableNote.let { currentProbableNote ->
+                delay(AUTO_DELAY)
+                if (currentProbableNote != null && currentProbableNote == probableNote) {
+                    selectedNote = currentProbableNote
+                }
+            }
+        }
 
         Box(
             modifier = modifier
@@ -159,7 +318,7 @@ class MainActivity : ComponentActivity() {
             if (debugMode) {
                 DebugView(frequency)
             } else {
-                NeedleDisplay(frequency, arcColor = MaterialTheme.colorScheme.onBackground)
+                NeedleDisplay(frequency)
             }
         }
 
@@ -174,52 +333,63 @@ class MainActivity : ComponentActivity() {
 
     // A set of buttons for selecting and modifying a note
     @Composable
-    fun NoteButtons(note: Note, modifier: Modifier) {
+    fun NoteButtons(note: Note, modifier: Modifier = Modifier) {
         Row(
             modifier = modifier,
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
         ) {
+            val weightedSideButtonMod = sideButtonMod.weight(0.25f)
+            val weightedMainButtonMod =
+                if (selectedNote == note)
+                    mainButtonSelectedMod.weight(1f)
+                else
+                    mainButtonMod.weight(1f)
+
             IconButton(
-                onClick = { note.shift(-1); selectedNote = note },
+                onClick = { note.shift(-1); if (!auto) selectedNote = note },
                 colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    contentColor = MaterialTheme.colorScheme.onBackground
+                    containerColor = Color.Transparent,
+                    contentColor = Color.Black
                 ),
-                modifier = Modifier.weight(0.25f)
+                modifier = weightedSideButtonMod
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Decrease Note")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Decrease note")
             }
 
             Button(
-                onClick = { selectedNote = note },
-                modifier = Modifier.weight(1f),
+                onClick = { selectedNote = note; auto = false },
+                modifier = weightedMainButtonMod,
+                shape = RoundedCornerShape(BORDER_RADIUS),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor =
-                        if (selectedNote == note )
-                            MaterialTheme.colorScheme.secondary
-                        else
-                            MaterialTheme.colorScheme.primary,
+                    containerColor = Color.Transparent,
+                    contentColor = Color.Black
                 ),
             ) {
                 Text(note.name)
             }
 
             IconButton(
-                onClick = { note.shift(1); selectedNote = note },
+                onClick = { note.shift(1); if (!auto) selectedNote = note },
                 colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    contentColor = MaterialTheme.colorScheme.onBackground
+                    containerColor = Color.Transparent,
+                    contentColor = Color.Black
                 ),
-                modifier = Modifier.weight(0.25f)
+                modifier = weightedSideButtonMod
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Increase Note")
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Increase note")
             }
         }
     }
 
     @Composable
-    fun NeedleDisplay(frequency: Double, arcColor: Color) {
+    fun NeedleDisplay(frequency: Double, modifier: Modifier = Modifier) {
+        val lineWidth = 10f
+        val needleWidth = 8f
+        val padding = 32f
+
+        val tickInset = 0.95f
+        val tickLen = 0.05f
+
         val angle by animateFloatAsState(
             selectedNote
                 .getDistance(frequency)
@@ -229,41 +399,43 @@ class MainActivity : ComponentActivity() {
         )
 
         Canvas(
-            modifier = Modifier.aspectRatio(2f)
+            modifier = modifier.aspectRatio(2f)
         ) {
-            val strokeWidth = 10f
-            val padding = 18f
-            val offset = strokeWidth / 2
-            val radius = min(size.height, size.width / 2f) - padding
+            val offset = lineWidth / 2 + padding
+            val radius = min(size.height, size.width / 2f) - offset
 
             // Draw center line
             drawLine(
-                color = Color.Green,
+                brush = silverBrush,
                 start = Offset(size.width / 2, size.height),
                 end = Offset(
                     x = size.width / 2,
                     y = size.height - radius
                 ),
-                strokeWidth = 4f
+                strokeWidth = lineWidth
             )
 
             // Draw ticks
+            val tickInner = (radius * (tickInset - tickLen))
+            val tickOuter = (radius * tickInset)
             var tickAngle = 0.0
-            val tickInset = 0.9f
-            // TODO use repeat instead of for with constant values
             repeat(19) {
                 tickAngle += 0.1f * 90f
                 drawLine(
-                    color = arcColor,
+                    brush = silverBrush,
                     start = Offset(
-                        x = size.width / 2 + (radius * tickInset)  * kotlin.math.cos(Math.toRadians(180.0 - tickAngle)).toFloat(),
-                        y = size.height - (radius * tickInset) * kotlin.math.sin(Math.toRadians(180.0 - tickAngle)).toFloat()
+                        x = size.width / 2 + tickInner * kotlin.math.cos(Math.toRadians(180.0 - tickAngle))
+                            .toFloat(),
+                        y = size.height - tickInner * kotlin.math.sin(Math.toRadians(180.0 - tickAngle))
+                            .toFloat()
                     ),
                     end = Offset(
-                        x = size.width / 2 + radius * kotlin.math.cos(Math.toRadians(180.0 - tickAngle)).toFloat(),
-                        y = size.height - radius * kotlin.math.sin(Math.toRadians(180.0 - tickAngle)).toFloat()
+                        x = size.width / 2 + tickOuter * kotlin.math.cos(Math.toRadians(180.0 - tickAngle))
+                            .toFloat(),
+                        y = size.height - tickOuter * kotlin.math.sin(Math.toRadians(180.0 - tickAngle))
+                            .toFloat()
                     ),
-                    strokeWidth = 8f
+                    strokeWidth = lineWidth
                 )
             }
 
@@ -272,37 +444,46 @@ class MainActivity : ComponentActivity() {
                 color = Color.Red,
                 start = Offset(size.width / 2, size.height),
                 end = Offset(
-                    x = size.width / 2 + radius * kotlin.math.cos(Math.toRadians(180.0 - angle)).toFloat(),
-                    y = size.height - radius * kotlin.math.sin(Math.toRadians(180.0 - angle)).toFloat()
+                    x = size.width / 2 + radius * kotlin.math.cos(Math.toRadians(180.0 - angle))
+                        .toFloat(),
+                    y = size.height - radius * kotlin.math.sin(Math.toRadians(180.0 - angle))
+                        .toFloat()
                 ),
-                strokeWidth = 8f
+                strokeWidth = needleWidth,
+                cap = StrokeCap.Round
+            )
+            drawCircle(
+                color = Color.Black,
+                radius = lineWidth,
+                center = Offset(size.width / 2, size.height)
             )
 
             // Draw the dial
             drawArc(
-                color = arcColor,
+                brush = silverBrush,
                 startAngle = 175f,
                 sweepAngle = 190f,
                 useCenter = false,
-                topLeft = Offset(offset + padding, offset + padding),
-                size = Size(size.width - strokeWidth - 2 * padding, (size.height - strokeWidth - 2 * padding) * 2),
-                style = Stroke(strokeWidth)
+                topLeft = Offset(offset, offset),
+                size = Size(2 * radius, 2 * radius),
+                style = Stroke(lineWidth)
             )
         }
     }
 
     @Composable
-    fun DebugView(frequency: Double) {
+    fun DebugView(frequency: Double, modifier: Modifier = Modifier) {
         val bins by listener.bins.collectAsState()
         val markers by listener.maxima.collectAsState()
 
         val max = bins.maxOrNull() ?: 1.0
 
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = modifier,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
+                color = Color.White,
                 text = "%.2f/%.2f".format(frequency, selectedNote.frequency),
                 textAlign = TextAlign.Center
             )
@@ -397,9 +578,7 @@ class MainActivity : ComponentActivity() {
     @Preview(showBackground = true)
     @Composable
     fun AppPreview() {
-        AppTheme {
-            MainPanel()
-        }
+        MainPanel()
     }
 }
 

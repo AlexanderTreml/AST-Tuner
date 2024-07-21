@@ -9,6 +9,7 @@ import kotlin.math.pow
 
 // Reference tone A2
 private const val REFERENCE = 110.0
+
 // Constant for calculating frequency
 private val ROOT: Double = 2.0.pow(1.0 / 12.0)
 

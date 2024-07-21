@@ -18,7 +18,7 @@ import kotlin.math.pow
 private const val SAMPLE_RATE = 44100
 private const val THRESHOLD = 1000
 
-class Listener(owner: LifecycleOwner): DefaultLifecycleObserver {
+class Listener(owner: LifecycleOwner) : DefaultLifecycleObserver {
     init {
         owner.lifecycle.addObserver(this)
     }
@@ -38,7 +38,7 @@ class Listener(owner: LifecycleOwner): DefaultLifecycleObserver {
     private val fft: FastFourierTransformer = FastFourierTransformer(DftNormalization.STANDARD)
     private var audioRecord: AudioRecord? = null
 
-    // TODO code cleanup
+    // TODO code cleanup and optimization
     fun start() {
         listenerScope.launch(Dispatchers.IO) {
             // TODO inform the user that something went wrong
@@ -124,7 +124,8 @@ class Listener(owner: LifecycleOwner): DefaultLifecycleObserver {
         val min = AudioRecord.getMinBufferSize(
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT)
+            AudioFormat.ENCODING_PCM_16BIT
+        )
 
         var result = min.takeHighestOneBit()
 
