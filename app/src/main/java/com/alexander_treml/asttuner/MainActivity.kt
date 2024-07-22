@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.AlertDialog
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -32,6 +33,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,12 +49,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -61,6 +62,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.alexander_treml.asttuner.ui.theme.AppTheme
+import com.alexander_treml.asttuner.ui.theme.Highlight
+import com.alexander_treml.asttuner.ui.theme.backgroundBrush
+import com.alexander_treml.asttuner.ui.theme.borderBrush
+import com.alexander_treml.asttuner.ui.theme.outlineBrush
+import com.alexander_treml.asttuner.ui.theme.outlineBrushPressed
+import com.alexander_treml.asttuner.ui.theme.shinyBlackBrush
+import com.alexander_treml.asttuner.ui.theme.silverBrush
 import kotlinx.coroutines.delay
 import kotlin.math.absoluteValue
 import kotlin.math.min
@@ -73,43 +82,6 @@ private val BORDER_WIDTH = 4.dp
 private val OUTLINE_WIDTH = 2.dp
 private val BORDER_RADIUS = 8.dp
 
-private val Brass0 = Color(0xFFC9851E)
-private val Brass1 = Color(0xFFDB9932)
-
-private val Silver0 = Color(0xFFA8A8A8)
-private val Silver1 = Color(0xFFFFFEFE)
-
-private val Gray0 = Color(0xFF000000)
-private val Gray1 = Color(0xFF242424)
-
-private val Highlight = Color(0x61FFFFFF)
-
-// Brushes
-val brassBrush = Brush.linearGradient(
-    listOf(Brass0, Brass1),
-    end = Offset(40f, 40f),
-    tileMode = TileMode.Mirror
-)
-
-val silverBrush = Brush.linearGradient(
-    listOf(Silver0, Silver1),
-    end = Offset(80f, 70f),
-    tileMode = TileMode.Mirror
-)
-
-val backgroundBrush = Brush.linearGradient(
-    listOf(Gray0, Gray1),
-    end = Offset(5f, 5f),
-    tileMode = TileMode.Repeated
-)
-
-val outlineBrush = Brush.verticalGradient(
-    listOf(Color.Transparent, Color.Black.copy(alpha = 0.65f))
-)
-
-val outlineBrushPressed = Brush.verticalGradient(
-    listOf(Color.Black.copy(alpha = 0.45f), Color.Black.copy(alpha = 0.65f))
-)
 
 // Pre-allocate modifiers
 val backgroundMod = Modifier
@@ -117,7 +89,7 @@ val backgroundMod = Modifier
 
 val borderMod = backgroundMod
     .border(
-        BorderStroke(BORDER_WIDTH, brassBrush),
+        BorderStroke(BORDER_WIDTH, borderBrush),
         shape = RoundedCornerShape(BORDER_RADIUS)
     )
     .padding(BORDER_WIDTH)
@@ -128,15 +100,15 @@ val panelMod = backgroundMod
     .padding(PADDING)
 
 val dividerMod = Modifier
-    .background(brush = brassBrush)
+    .background(brush = borderBrush)
 
 val mainButtonMod = Modifier
     .padding(PADDING)
-    .background(brassBrush, shape = RoundedCornerShape(BORDER_RADIUS))
+    .background(shinyBlackBrush, shape = RoundedCornerShape(BORDER_RADIUS))
     .border(BorderStroke(OUTLINE_WIDTH, outlineBrush), shape = RoundedCornerShape(BORDER_RADIUS))
 val mainButtonSelectedMod = Modifier
     .padding(PADDING)
-    .background(brassBrush, shape = RoundedCornerShape(BORDER_RADIUS))
+    .background(shinyBlackBrush, shape = RoundedCornerShape(BORDER_RADIUS))
     .border(
         BorderStroke(OUTLINE_WIDTH, outlineBrushPressed),
         shape = RoundedCornerShape(BORDER_RADIUS)
@@ -156,11 +128,11 @@ val sideButtonSelectedMod = Modifier
     )
 
 
-// TODO fix bug that causes button issue
+// TODO save/load/edit functionality
 // TODO code cleanup and ui optimization
 // TODO adjust splash screen color
-// TODO write tests?
-// TODO use theme?
+// TODO find out how to use theme correctly (text color seems to be chosen automatically if not specified)
+// TODO write tests or remove tests and test framework
 class MainActivity : ComponentActivity() {
     private val listener = Listener(this)
     private var tuning = Tuning()
@@ -187,27 +159,29 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun MainPanel() {
-        Surface(
-            color = Gray0
-        ) {
+        AppTheme {
             Surface(
-                modifier = borderMod,
+                color = MaterialTheme.colorScheme.background
             ) {
-                Column {
-                    Toolbar(
-                        modifier = panelMod
-                    )
-                    TuningPanel(
-                        modifier = panelMod.weight(1f)
-                    )
-                    HorizontalDivider(
-                        thickness = BORDER_WIDTH,
-                        color = Color.Transparent,
-                        modifier = dividerMod
-                    )
-                    FrequencyDisplay(
-                        modifier = backgroundMod
-                    )
+                Surface(
+                    modifier = borderMod,
+                ) {
+                    Column {
+                        Toolbar(
+                            modifier = panelMod
+                        )
+                        TuningPanel(
+                            modifier = panelMod.weight(1f)
+                        )
+                        HorizontalDivider(
+                            thickness = BORDER_WIDTH,
+                            color = Color.Transparent,
+                            modifier = dividerMod
+                        )
+                        FrequencyDisplay(
+                            modifier = backgroundMod
+                        )
+                    }
                 }
             }
         }
@@ -244,22 +218,25 @@ class MainActivity : ComponentActivity() {
                 onClick = { },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.Transparent,
-                    contentColor = Color.Black
+                    contentColor = Color.White
                 ),
                 modifier = mainButtonMod.weight(1f)
             ) {
-                Text(text = "Tuning")
+                Text(text = "Six String Standard")
             }
 
+            val context = LocalContext.current
             IconButton(
-                onClick = { },
+                onClick = {
+                    Toast.makeText(context, "Not implemented yet", Toast.LENGTH_SHORT).show()
+                },
                 colors = IconButtonDefaults.iconButtonColors(
                     containerColor = Color.Transparent,
                     contentColor = Color.Black
                 ),
                 modifier = sideButtonMod.weight(0.25f)
             ) {
-                Icon(Icons.Filled.Create, contentDescription = "Rename tuning")
+                Icon(Icons.Filled.Create, contentDescription = "Edit tunings")
             }
         }
     }
@@ -362,7 +339,7 @@ class MainActivity : ComponentActivity() {
                 shape = RoundedCornerShape(BORDER_RADIUS),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.Transparent,
-                    contentColor = Color.Black
+                    contentColor = Color.White
                 ),
             ) {
                 Text(note.name)

@@ -4,11 +4,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 
+// TODO is this useful?
 val colorScheme = darkColorScheme(
-    primary = Brass,
-    secondary = LightBrass,
-    background = DarkGray,
-    onBackground = LightGray
+    primary = SILVER0,
+    background = GRAY0,
 )
 
 @Composable
