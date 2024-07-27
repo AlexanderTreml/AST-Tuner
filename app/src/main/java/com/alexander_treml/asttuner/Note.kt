@@ -13,6 +13,10 @@ private const val REFERENCE = 110.0
 // Constant for calculating frequency
 private val ROOT: Double = 2.0.pow(1.0 / 12.0)
 
+// Limits
+private const val MIN_DIST = -24
+private const val MAX_DIST = 65
+
 class Note(private var distanceToReference: Int) {
     constructor() : this(0)
 
@@ -21,9 +25,13 @@ class Note(private var distanceToReference: Int) {
     var frequency by mutableDoubleStateOf(ROOT.pow(distanceToReference.toDouble()) * REFERENCE)
         private set
 
-    // TODO enforce limits
+    init {
+        distanceToReference = distanceToReference.coerceIn(MIN_DIST, MAX_DIST)
+    }
+
     fun shift(semitones: Int) {
         distanceToReference += semitones
+        distanceToReference = distanceToReference.coerceIn(MIN_DIST, MAX_DIST)
         name = getName(distanceToReference)
         frequency = ROOT.pow(distanceToReference.toDouble()) * REFERENCE
     }

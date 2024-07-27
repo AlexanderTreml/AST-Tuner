@@ -4,11 +4,17 @@ import android.Manifest
 import android.app.AlertDialog
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.widget.Toast
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -20,13 +26,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -41,6 +49,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -51,9 +60,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -95,9 +104,12 @@ val borderMod = backgroundMod
     .padding(BORDER_WIDTH)
     .clip(RoundedCornerShape(BORDER_RADIUS))
 
-
 val panelMod = backgroundMod
     .padding(PADDING)
+
+val lowerPanelMod = backgroundMod
+    .aspectRatio(2f)
+    .clip(RectangleShape)
 
 val dividerMod = Modifier
     .background(brush = borderBrush)
@@ -128,11 +140,12 @@ val sideButtonSelectedMod = Modifier
     )
 
 
-// TODO save/load/edit functionality
+// TODO save/load functionality
 // TODO code cleanup and ui optimization
 // TODO adjust splash screen color
 // TODO find out how to use theme correctly (text color seems to be chosen automatically if not specified)
 // TODO write tests or remove tests and test framework
+// TODO Deal with Logcat warnings
 class MainActivity : ComponentActivity() {
     private val listener = Listener(this)
     private var tuning = Tuning()
@@ -143,6 +156,8 @@ class MainActivity : ComponentActivity() {
     // Auto selection
     private var auto by mutableStateOf(false)
     private var probableNote by mutableStateOf<Note?>(null)
+
+    private var edit by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -178,8 +193,8 @@ class MainActivity : ComponentActivity() {
                             color = Color.Transparent,
                             modifier = dividerMod
                         )
-                        FrequencyDisplay(
-                            modifier = backgroundMod
+                        LowerPanel(
+                            modifier = lowerPanelMod
                         )
                     }
                 }
@@ -195,6 +210,12 @@ class MainActivity : ComponentActivity() {
         ) {
             val autoMod =
                 if (auto)
+                    sideButtonSelectedMod.weight(0.25f)
+                else
+                    sideButtonMod.weight(0.25f)
+
+            val editMod =
+                if (edit)
                     sideButtonSelectedMod.weight(0.25f)
                 else
                     sideButtonMod.weight(0.25f)
@@ -225,18 +246,19 @@ class MainActivity : ComponentActivity() {
                 Text(text = "Six String Standard")
             }
 
-            val context = LocalContext.current
             IconButton(
-                onClick = {
-                    Toast.makeText(context, "Not implemented yet", Toast.LENGTH_SHORT).show()
-                },
+                onClick = { edit = !edit },
                 colors = IconButtonDefaults.iconButtonColors(
                     containerColor = Color.Transparent,
-                    contentColor = Color.Black
+                    contentColor =
+                    if (edit)
+                        Color.Green
+                    else
+                        Color.Black
                 ),
-                modifier = sideButtonMod.weight(0.25f)
+                modifier = editMod
             ) {
-                Icon(Icons.Filled.Create, contentDescription = "Edit tunings")
+                Icon(Icons.Filled.Build, contentDescription = "Edit tunings")
             }
         }
     }
@@ -249,6 +271,27 @@ class MainActivity : ComponentActivity() {
         ) {
             tuning.notes.forEach { note ->
                 NoteButtons(note)
+            }
+        }
+    }
+
+
+    @Composable
+    fun LowerPanel(modifier: Modifier = Modifier) {
+        Box(modifier = modifier) {
+            AnimatedVisibility(
+                visible = !edit,
+                enter = slideInVertically { it },
+                exit = slideOutVertically { it }
+            ) {
+                FrequencyDisplay()
+            }
+            AnimatedVisibility(
+                visible = edit,
+                enter = slideInVertically { -it },
+                exit = slideOutVertically { -it }
+            ) {
+                EditDisplay()
             }
         }
     }
@@ -278,24 +321,57 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        var rawOffsetX by remember { mutableFloatStateOf(0f) }
+
+        val animatedOffsetX by animateFloatAsState(
+            targetValue = rawOffsetX,
+            animationSpec = spring(),
+            label = "Display Animation"
+        )
         Box(
             modifier = modifier
-                .aspectRatio(2f)
                 .draggable(
                     orientation = Orientation.Horizontal,
                     state = rememberDraggableState { delta ->
-                        if (delta >= 30f) {
-                            debugMode = false
-                        } else if (delta <= -30f) {
-                            debugMode = true
+                        rawOffsetX  += delta
+                        if (debugMode) {
+                            rawOffsetX  = rawOffsetX .coerceIn(0f, 200f)
+                        } else {
+                            rawOffsetX  = rawOffsetX .coerceIn(-200f, 0f)
                         }
+
+                        if (rawOffsetX  >= 100f) {
+                            debugMode = false
+                            rawOffsetX  = 0f
+                        } else if (rawOffsetX  <= -100f) {
+                            debugMode = true
+                            rawOffsetX  = 0f
+                        }
+                    },
+                    onDragStopped = {
+                        rawOffsetX = 0f
                     }
                 )
         ) {
-            if (debugMode) {
-                DebugView(frequency)
-            } else {
-                NeedleDisplay(frequency)
+            AnimatedVisibility(
+                visible = !debugMode,
+                enter = slideInHorizontally { -it },
+                exit = slideOutHorizontally { -it }
+            ) {
+                NeedleDisplay(
+                    frequency = frequency,
+                    modifier = Modifier.offset(x = animatedOffsetX.dp)
+                )
+            }
+            AnimatedVisibility(
+                visible = debugMode,
+                enter = slideInHorizontally { it },
+                exit = slideOutHorizontally { it }
+            ) {
+                DebugView(
+                    frequency = frequency,
+                    modifier = Modifier.offset(x = animatedOffsetX.dp)
+                )
             }
         }
 
@@ -304,6 +380,60 @@ class MainActivity : ComponentActivity() {
             currentView.keepScreenOn = true
             onDispose {
                 currentView.keepScreenOn = false
+            }
+        }
+    }
+
+    @Composable
+    fun EditDisplay(modifier: Modifier = Modifier) {
+        Row(modifier = modifier) {
+            val weightedSideButtonMod = sideButtonMod.weight(0.5f).fillMaxHeight()
+            IconButton(
+                onClick = { tuning.transposeDown() },
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = Color.Black
+                ),
+                modifier = weightedSideButtonMod
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Transpose down")
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+            ) {
+                val weightedMainButtonMod = sideButtonMod.weight(0.5f).fillMaxWidth()
+                Button(
+                    onClick = { tuning.addNote() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.Black
+                    ),
+                    modifier = weightedMainButtonMod
+                ) {
+                    Text("+", fontSize = 24.sp, fontWeight = FontWeight(600))
+                }
+                Button(
+                    onClick = { tuning.removeNote() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.Black
+                    ),
+                    modifier = weightedMainButtonMod
+                ) {
+                    Text("-", fontSize = 24.sp, fontWeight = FontWeight(600))
+                }
+            }
+
+            IconButton(
+                onClick = { tuning.transposeUp() },
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = Color.Black
+                ),
+                modifier = weightedSideButtonMod
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Transpose up")
             }
         }
     }
