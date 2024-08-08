@@ -4,33 +4,30 @@ import android.Manifest
 import android.app.AlertDialog
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -44,26 +41,14 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -79,19 +64,14 @@ import com.alexander_treml.asttuner.ui.theme.outlineBrush
 import com.alexander_treml.asttuner.ui.theme.outlineBrushPressed
 import com.alexander_treml.asttuner.ui.theme.shinyBlackBrush
 import com.alexander_treml.asttuner.ui.theme.silverBrush
-import kotlinx.coroutines.delay
-import kotlin.math.absoluteValue
-import kotlin.math.min
 
 // Constants
-private const val AUTO_DELAY = 500L
-
 private val PADDING = 8.dp
 private val BORDER_WIDTH = 4.dp
 private val OUTLINE_WIDTH = 2.dp
 private val BORDER_RADIUS = 8.dp
 
-
+// TODO this is ugly
 // Pre-allocate modifiers
 val backgroundMod = Modifier
     .background(brush = backgroundBrush)
@@ -140,24 +120,16 @@ val sideButtonSelectedMod = Modifier
     )
 
 
-// TODO save/load functionality
-// TODO code cleanup and ui optimization
+// TODO component previews
+// TODO ui optimization
 // TODO adjust splash screen color
 // TODO find out how to use theme correctly (text color seems to be chosen automatically if not specified)
 // TODO write tests or remove tests and test framework
 // TODO Deal with Logcat warnings
+// TODO haptic feedback
 class MainActivity : ComponentActivity() {
     private val listener = Listener(this)
-    private var tuning = Tuning()
-
-    // The target note
-    private var selectedNote by mutableStateOf(tuning.notes[0])
-
-    // Auto selection
-    private var auto by mutableStateOf(false)
-    private var probableNote by mutableStateOf<Note?>(null)
-
-    private var edit by mutableStateOf(false)
+    private val state: AppState by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -182,6 +154,7 @@ class MainActivity : ComponentActivity() {
                     modifier = borderMod,
                 ) {
                     Column {
+                        // TODO fix shader discontinuity between Toolbar and TuningPanel
                         Toolbar(
                             modifier = panelMod
                         )
@@ -198,10 +171,18 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
+                if (state.selectMode.value) {
+                    TuningSelection(
+                        modifier = borderMod
+                            .fillMaxSize()
+                            .background(Color(0xAA000000))
+                    )
+                }
             }
         }
     }
 
+    // Toolbar with auto mode, tuning selection, and edit mode
     @Composable
     fun Toolbar(modifier: Modifier = Modifier) {
         Row(
@@ -209,23 +190,23 @@ class MainActivity : ComponentActivity() {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val autoMod =
-                if (auto)
+                if (state.autoMode.value)
                     sideButtonSelectedMod.weight(0.25f)
                 else
                     sideButtonMod.weight(0.25f)
 
             val editMod =
-                if (edit)
+                if (state.editMode.value)
                     sideButtonSelectedMod.weight(0.25f)
                 else
                     sideButtonMod.weight(0.25f)
 
             IconButton(
-                onClick = { auto = !auto },
+                onClick = { state.autoMode.toggle() },
                 colors = IconButtonDefaults.iconButtonColors(
                     containerColor = Color.Transparent,
                     contentColor =
-                    if (auto)
+                    if (state.autoMode.value)
                         Color.Green
                     else
                         Color.Black
@@ -236,22 +217,43 @@ class MainActivity : ComponentActivity() {
             }
 
             Button(
-                onClick = { },
+                onClick = {
+                    // TODO check if it is possible to click UI elements behind the selection list
+                    if (!state.editMode.value) state.selectMode.value = true
+                },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.Transparent,
                     contentColor = Color.White
                 ),
                 modifier = mainButtonMod.weight(1f)
             ) {
-                Text(text = "Six String Standard")
+                if (state.editMode.value) {
+                    // TODO text field can not be unfocused
+                    // TODO text field is so big it shifts the layout
+                    TextField(
+                        value = state.editedName.value,
+                        onValueChange = { name -> state.editedName.value = name },
+                        colors = TextFieldDefaults.colors(
+                            unfocusedContainerColor = Color.Transparent,
+                        )
+                    )
+                } else {
+                    Text(text = state.tuningName.value)
+                }
             }
 
             IconButton(
-                onClick = { edit = !edit },
+                onClick = {
+                    if (!state.editMode.value) {
+                        state.editMode.value = true
+                    } else {
+                        showSaveTuningDialog()
+                    }
+                },
                 colors = IconButtonDefaults.iconButtonColors(
                     containerColor = Color.Transparent,
                     contentColor =
-                    if (edit)
+                    if (state.editMode.value)
                         Color.Green
                     else
                         Color.Black
@@ -263,133 +265,104 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // Create a column of buttons, one for each note in the tuning
+    // Create buttons corresponding to the tuning
     @Composable
     fun TuningPanel(modifier: Modifier = Modifier) {
         Column(
-            modifier = modifier,
+            modifier = modifier.verticalScroll(rememberScrollState()),
         ) {
-            tuning.notes.forEach { note ->
-                NoteButtons(note)
+            state.tuning.forEachIndexed { i, note ->
+                NoteButtons(i, note)
             }
         }
     }
 
+    // A set of buttons for selecting and modifying a note
+    @Composable
+    fun NoteButtons(index: Int, note: Note, modifier: Modifier = Modifier) {
+        Row(
+            modifier = modifier,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val weightedSideButtonMod = sideButtonMod.weight(0.25f)
+            val weightedMainButtonMod =
+                if (state.selectedIndex.intValue == index)
+                    mainButtonSelectedMod.weight(1f)
+                else
+                    mainButtonMod.weight(1f)
 
+            IconButton(
+                onClick = {
+                    state.shiftNote(index, -1)
+                    if (!state.autoMode.value) state.selectedIndex.intValue = index
+                },
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = Color.Black
+                ),
+                modifier = weightedSideButtonMod
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Decrease note")
+            }
+
+            Button(
+                onClick = { state.selectedIndex.intValue = index; state.autoMode.value = false },
+                modifier = weightedMainButtonMod,
+                shape = RoundedCornerShape(BORDER_RADIUS),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = Color.White
+                ),
+            ) {
+                Text(note.name)
+            }
+
+            IconButton(
+                onClick = {
+                    state.shiftNote(index, 1)
+                    if (!state.autoMode.value) state.selectedIndex.intValue = index
+                },
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = Color.Black
+                ),
+                modifier = weightedSideButtonMod
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Increase note")
+            }
+        }
+    }
+
+    // Displays the FrequencyDisplay normally, or the EditPanel in edit mode
     @Composable
     fun LowerPanel(modifier: Modifier = Modifier) {
         Box(modifier = modifier) {
             AnimatedVisibility(
-                visible = !edit,
+                visible = !state.editMode.value,
                 enter = slideInVertically { it },
                 exit = slideOutVertically { it }
             ) {
-                FrequencyDisplay()
+                FrequencyDisplay(listener, state)
             }
             AnimatedVisibility(
-                visible = edit,
+                visible = state.editMode.value,
                 enter = slideInVertically { -it },
                 exit = slideOutVertically { -it }
             ) {
-                EditDisplay()
+                EditPanel()
             }
         }
     }
 
-    // Display the listener results
-    // Has a debug mode to see the internal processing
+    // Buttons for editing tunings
     @Composable
-    fun FrequencyDisplay(modifier: Modifier = Modifier) {
-        val frequency by listener.frequency.collectAsState()
-        var debugMode by remember { mutableStateOf(false) }
-
-        val detectedNote = tuning.notes.minBy { it.getDistance(frequency).absoluteValue }
-        probableNote =
-            if (auto && frequency != 0.0 && detectedNote.getDistance(frequency).absoluteValue < 3) {
-                detectedNote
-            } else {
-                null
-            }
-
-        // This will re-launch if probableNote changes
-        LaunchedEffect(probableNote) {
-            probableNote.let { currentProbableNote ->
-                delay(AUTO_DELAY)
-                if (currentProbableNote != null && currentProbableNote == probableNote) {
-                    selectedNote = currentProbableNote
-                }
-            }
-        }
-
-        var rawOffsetX by remember { mutableFloatStateOf(0f) }
-
-        val animatedOffsetX by animateFloatAsState(
-            targetValue = rawOffsetX,
-            animationSpec = spring(),
-            label = "Display Animation"
-        )
-        Box(
-            modifier = modifier
-                .draggable(
-                    orientation = Orientation.Horizontal,
-                    state = rememberDraggableState { delta ->
-                        rawOffsetX  += delta
-                        if (debugMode) {
-                            rawOffsetX  = rawOffsetX .coerceIn(0f, 200f)
-                        } else {
-                            rawOffsetX  = rawOffsetX .coerceIn(-200f, 0f)
-                        }
-
-                        if (rawOffsetX  >= 100f) {
-                            debugMode = false
-                            rawOffsetX  = 0f
-                        } else if (rawOffsetX  <= -100f) {
-                            debugMode = true
-                            rawOffsetX  = 0f
-                        }
-                    },
-                    onDragStopped = {
-                        rawOffsetX = 0f
-                    }
-                )
-        ) {
-            AnimatedVisibility(
-                visible = !debugMode,
-                enter = slideInHorizontally { -it },
-                exit = slideOutHorizontally { -it }
-            ) {
-                NeedleDisplay(
-                    frequency = frequency,
-                    modifier = Modifier.offset(x = animatedOffsetX.dp)
-                )
-            }
-            AnimatedVisibility(
-                visible = debugMode,
-                enter = slideInHorizontally { it },
-                exit = slideOutHorizontally { it }
-            ) {
-                DebugView(
-                    frequency = frequency,
-                    modifier = Modifier.offset(x = animatedOffsetX.dp)
-                )
-            }
-        }
-
-        val currentView = LocalView.current
-        DisposableEffect(Unit) {
-            currentView.keepScreenOn = true
-            onDispose {
-                currentView.keepScreenOn = false
-            }
-        }
-    }
-
-    @Composable
-    fun EditDisplay(modifier: Modifier = Modifier) {
+    fun EditPanel(modifier: Modifier = Modifier) {
         Row(modifier = modifier) {
-            val weightedSideButtonMod = sideButtonMod.weight(0.5f).fillMaxHeight()
+            val weightedSideButtonMod = sideButtonMod
+                .weight(0.5f)
+                .fillMaxHeight()
             IconButton(
-                onClick = { tuning.transposeDown() },
+                onClick = { state.transpose(-1) },
                 colors = IconButtonDefaults.iconButtonColors(
                     containerColor = Color.Transparent,
                     contentColor = Color.Black
@@ -402,9 +375,11 @@ class MainActivity : ComponentActivity() {
             Column(
                 modifier = Modifier.weight(1f),
             ) {
-                val weightedMainButtonMod = sideButtonMod.weight(0.5f).fillMaxWidth()
+                val weightedMainButtonMod = sideButtonMod
+                    .weight(0.5f)
+                    .fillMaxWidth()
                 Button(
-                    onClick = { tuning.addNote() },
+                    onClick = { state.addNote() },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.Transparent,
                         contentColor = Color.Black
@@ -414,7 +389,7 @@ class MainActivity : ComponentActivity() {
                     Text("+", fontSize = 24.sp, fontWeight = FontWeight(600))
                 }
                 Button(
-                    onClick = { tuning.removeNote() },
+                    onClick = { state.removeNote() },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.Transparent,
                         contentColor = Color.Black
@@ -426,7 +401,7 @@ class MainActivity : ComponentActivity() {
             }
 
             IconButton(
-                onClick = { tuning.transposeUp() },
+                onClick = { state.transpose(1) },
                 colors = IconButtonDefaults.iconButtonColors(
                     containerColor = Color.Transparent,
                     contentColor = Color.Black
@@ -438,206 +413,110 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // A set of buttons for selecting and modifying a note
+    // TODO do not show the save dialog if no changes where made
+    // TODO better selection list visuals and broader buttons for better experience
+    // A scrollable list for selecting tunings
+    // Combined clickable is experimental, but considered stable
+    @OptIn(ExperimentalFoundationApi::class)
     @Composable
-    fun NoteButtons(note: Note, modifier: Modifier = Modifier) {
-        Row(
-            modifier = modifier,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val weightedSideButtonMod = sideButtonMod.weight(0.25f)
-            val weightedMainButtonMod =
-                if (selectedNote == note)
-                    mainButtonSelectedMod.weight(1f)
-                else
-                    mainButtonMod.weight(1f)
-
-            IconButton(
-                onClick = { note.shift(-1); if (!auto) selectedNote = note },
-                colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = Color.Transparent,
-                    contentColor = Color.Black
-                ),
-                modifier = weightedSideButtonMod
-            ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Decrease note")
-            }
-
-            Button(
-                onClick = { selectedNote = note; auto = false },
-                modifier = weightedMainButtonMod,
-                shape = RoundedCornerShape(BORDER_RADIUS),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.Transparent,
-                    contentColor = Color.White
-                ),
-            ) {
-                Text(note.name)
-            }
-
-            IconButton(
-                onClick = { note.shift(1); if (!auto) selectedNote = note },
-                colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = Color.Transparent,
-                    contentColor = Color.Black
-                ),
-                modifier = weightedSideButtonMod
-            ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Increase note")
-            }
-        }
-    }
-
-    @Composable
-    fun NeedleDisplay(frequency: Double, modifier: Modifier = Modifier) {
-        val lineWidth = 10f
-        val needleWidth = 8f
-        val padding = 32f
-
-        val tickInset = 0.95f
-        val tickLen = 0.05f
-
-        val angle by animateFloatAsState(
-            selectedNote
-                .getDistance(frequency)
-                .toFloat()
-                .coerceIn(-1f, 1f) * 90f + 90f,
-            label = "Needle Animation"
-        )
-
-        Canvas(
-            modifier = modifier.aspectRatio(2f)
-        ) {
-            val offset = lineWidth / 2 + padding
-            val radius = min(size.height, size.width / 2f) - offset
-
-            // Draw center line
-            drawLine(
-                brush = silverBrush,
-                start = Offset(size.width / 2, size.height),
-                end = Offset(
-                    x = size.width / 2,
-                    y = size.height - radius
-                ),
-                strokeWidth = lineWidth
-            )
-
-            // Draw ticks
-            val tickInner = (radius * (tickInset - tickLen))
-            val tickOuter = (radius * tickInset)
-            var tickAngle = 0.0
-            repeat(19) {
-                tickAngle += 0.1f * 90f
-                drawLine(
-                    brush = silverBrush,
-                    start = Offset(
-                        x = size.width / 2 + tickInner * kotlin.math.cos(Math.toRadians(180.0 - tickAngle))
-                            .toFloat(),
-                        y = size.height - tickInner * kotlin.math.sin(Math.toRadians(180.0 - tickAngle))
-                            .toFloat()
-                    ),
-                    end = Offset(
-                        x = size.width / 2 + tickOuter * kotlin.math.cos(Math.toRadians(180.0 - tickAngle))
-                            .toFloat(),
-                        y = size.height - tickOuter * kotlin.math.sin(Math.toRadians(180.0 - tickAngle))
-                            .toFloat()
-                    ),
-                    strokeWidth = lineWidth
-                )
-            }
-
-            // Draw the needle
-            drawLine(
-                color = Color.Red,
-                start = Offset(size.width / 2, size.height),
-                end = Offset(
-                    x = size.width / 2 + radius * kotlin.math.cos(Math.toRadians(180.0 - angle))
-                        .toFloat(),
-                    y = size.height - radius * kotlin.math.sin(Math.toRadians(180.0 - angle))
-                        .toFloat()
-                ),
-                strokeWidth = needleWidth,
-                cap = StrokeCap.Round
-            )
-            drawCircle(
-                color = Color.Black,
-                radius = lineWidth,
-                center = Offset(size.width / 2, size.height)
-            )
-
-            // Draw the dial
-            drawArc(
-                brush = silverBrush,
-                startAngle = 175f,
-                sweepAngle = 190f,
-                useCenter = false,
-                topLeft = Offset(offset, offset),
-                size = Size(2 * radius, 2 * radius),
-                style = Stroke(lineWidth)
-            )
-        }
-    }
-
-    @Composable
-    fun DebugView(frequency: Double, modifier: Modifier = Modifier) {
-        val bins by listener.bins.collectAsState()
-        val markers by listener.maxima.collectAsState()
-
-        val max = bins.maxOrNull() ?: 1.0
-
+    fun TuningSelection(
+        modifier: Modifier = Modifier
+    ) {
         Column(
-            modifier = modifier,
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = modifier
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState())
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(BORDER_RADIUS))
+                .padding(16.dp)
         ) {
+            state.tunings.keys
+                .toList()
+                .sorted()
+                .forEach { item ->
+                    Text(
+                        text = item,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .combinedClickable(
+                                onClick = { state.selectTuning(item) },
+                                onLongClick = { showDeleteTuningDialog(item) },
+                            )
+                            .padding(PADDING)
+                    )
+                    HorizontalDivider()
+                }
             Text(
-                color = Color.White,
-                text = "%.2f/%.2f".format(frequency, selectedNote.frequency),
-                textAlign = TextAlign.Center
-            )
-            Canvas(
+                text = "+",
+                textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
-            ) {
-                if (bins.isEmpty()) {
-                    return@Canvas
-                }
-
-                val maxHeight = size.height / 2
-                val spacing = size.width / (bins.size - 1)
-
-                // Draw the graph line
-                drawPath(
-                    path = Path().apply {
-                        bins.forEachIndexed { index, point ->
-                            val x = index * spacing
-                            val y = maxHeight - (point / max) * maxHeight
-                            if (index == 0) {
-                                moveTo(x, (y).toFloat())
-                            } else {
-                                lineTo(x, (y).toFloat())
-                            }
-                        }
-                    },
-                    color = Color.Red,
-                    style = Stroke(width = 2.dp.toPx())
-                )
-
-                // Draw vertical lines at the marker positions
-                markers.forEach { marker ->
-                    val x = marker * spacing
-
-                    drawLine(
-                        color = Color.Green,
-                        start = Offset(x, 0f),
-                        end = Offset(x, size.height),
-                        strokeWidth = 1f
-                    )
-                }
-            }
+                    .clickable { state.addTuning() }
+                    .padding(PADDING)
+            )
         }
     }
 
+    // Dialogs related to tuning editing
+    // TODO dialog theme?
+    private fun showDeleteTuningDialog(item: String) {
+        AlertDialog
+            .Builder(this)
+            .setTitle("Delete Tuning?")
+            .setMessage("Do you want to delete the tuning \"$item\"")
+            .setCancelable(true)
+            .setNegativeButton("Cancel") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .setPositiveButton("OK") { dialog, _ ->
+                state.deleteTuning(item)
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun showSaveTuningDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Save Tuning?")
+            .setMessage("Do you want to save the changes made to \"${state.editedName.value}\"")
+            .setCancelable(true)
+            .setNegativeButton("Discard") { dialog, _ ->
+                state.discardEdits()
+                dialog.dismiss()
+            }
+            .setNeutralButton("Keep editing") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .setPositiveButton("Save") { dialog, _ ->
+                if (state.tuningName.value != state.editedName.value && state.tunings.contains(state.editedName.value)) {
+                    showOverrideDialog()
+                } else {
+                    state.saveTuning()
+                }
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun showOverrideDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Override Tuning?")
+            .setMessage("This will override an existing tuning. Do you wish to proceed?")
+            .setCancelable(true)
+            .setNegativeButton("Discard") { dialog, _ ->
+                state.discardEdits()
+                dialog.dismiss()
+            }
+            .setNeutralButton("Keep editing") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .setPositiveButton("Override") { dialog, _ ->
+                state.saveTuning()
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    // Permission handling
     private fun handlePermissions(onPermissionGranted: () -> Unit) {
         val requestPermissionLauncher =
             registerForActivityResult(
@@ -682,7 +561,11 @@ class MainActivity : ComponentActivity() {
             .show()
     }
 
-    @Preview(showBackground = true)
+    // TODO use onStop/onPause to stop animations etc.
+
+    // Preview
+    // TODO preview not working
+    @Preview
     @Composable
     fun AppPreview() {
         MainPanel()

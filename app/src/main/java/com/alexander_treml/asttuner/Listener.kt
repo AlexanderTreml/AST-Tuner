@@ -16,7 +16,7 @@ import org.apache.commons.math3.transform.TransformType
 import kotlin.math.pow
 
 private const val SAMPLE_RATE = 44100
-private const val THRESHOLD = 1000
+private const val THRESHOLD = 1000.0
 
 class Listener(owner: LifecycleOwner) : DefaultLifecycleObserver {
     init {
@@ -27,7 +27,7 @@ class Listener(owner: LifecycleOwner) : DefaultLifecycleObserver {
     val frequency = MutableStateFlow(0.0)
 
     // Debugging values
-    val bins: MutableStateFlow<List<Double>> = MutableStateFlow(emptyList())
+    val autocorrelationValues: MutableStateFlow<List<Double>> = MutableStateFlow(emptyList())
     val maxima: MutableStateFlow<List<Int>> = MutableStateFlow(emptyList())
 
     private val bufferSize = getBufferSize()
@@ -39,6 +39,7 @@ class Listener(owner: LifecycleOwner) : DefaultLifecycleObserver {
     private var audioRecord: AudioRecord? = null
 
     // TODO code cleanup and optimization
+    // TODO pause when in edit mode or selecting a tuning
     fun start() {
         listenerScope.launch(Dispatchers.IO) {
             // TODO inform the user that something went wrong
@@ -54,7 +55,7 @@ class Listener(owner: LifecycleOwner) : DefaultLifecycleObserver {
 
                 val magnitudes = autocorrelation(fftBuffer).sliceArray(0..bufferSize / 2)
 
-                bins.value = magnitudes.toList()
+                autocorrelationValues.value = magnitudes.toList()
                 // Find maxima in the first section of the autocorrelation
                 maxima.value = getLocalMaxima(magnitudes)
 

@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+option java_package = "com.alexander_treml.asttuner";
+option java_multiple_files = true;
+
+message StoredNotes {
+  repeated int32 note = 2;
+}
+
+message StoredTunings {
+  map<string, StoredNotes> tunings = 3;
+}
