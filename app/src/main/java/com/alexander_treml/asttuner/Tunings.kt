@@ -1,13 +1,17 @@
 package com.alexander_treml.asttuner
 
+import android.app.Notification
+import android.app.NotificationManager
 import android.content.Context
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.Serializer
 import androidx.datastore.dataStore
 import androidx.work.CoroutineWorker
 import androidx.work.Data
+import androidx.work.ForegroundInfo
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
@@ -44,20 +48,15 @@ object Tunings : Serializer<StoredTunings> {
             // Needs to be int array to be accepted by the "Data" type
             entry.value.map { note -> note.distanceToReference }.toTypedArray()
         }).build()
-        Log.d("DEBUG", "Data collected...")
         val worker = OneTimeWorkRequestBuilder<SaveWorker>()
             .setInputData(saveData)
-            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .build()
-        Log.d("DEBUG", "Worker constructed...")
         WorkManager.getInstance(context).enqueue(worker)
-        Log.d("DEBUG", "Saving queued...")
     }
 
     class SaveWorker(private val context: Context, params: WorkerParameters) :
         CoroutineWorker(context, params) {
         override suspend fun doWork(): Result {
-            Log.d("DEBUG", "Saving...")
             try {
                 context.tuningDataStore.updateData { current ->
                     current.toBuilder().clear().putAllTunings(
@@ -69,7 +68,6 @@ object Tunings : Serializer<StoredTunings> {
                         }
                     ).build()
                 }
-                Log.d("DEBUG", "Done!")
                 return Result.success()
             } catch (e: Exception) {
                 return Result.failure()

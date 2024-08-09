@@ -233,6 +233,7 @@ class MainActivity : ComponentActivity() {
                     TextField(
                         value = state.editedName.value,
                         onValueChange = { name -> state.editedName.value = name },
+                        singleLine = true,
                         colors = TextFieldDefaults.colors(
                             unfocusedContainerColor = Color.Transparent,
                         )
