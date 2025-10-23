@@ -1,5 +1,6 @@
 package com.alexander_treml.asttuner
 
+import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -14,6 +15,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -174,7 +178,7 @@ fun NeedleDisplay(active: Boolean, frequency: Double, targetNote: Note, modifier
         val radius = min(size.height, size.width / 2f) - offset
 
         // Draw indicator LED
-        val ledRadius = 16f
+        val ledRadius = radius * 0.08f
         val ledCenter = Offset(x = offset + radius + (radius / 2) * kotlin.math.cos(Math.toRadians(135.0)).toFloat(), y = offset + radius - (radius / 2) * kotlin.math.sin(Math.toRadians(135.0)).toFloat())
         val ledColor = if (active) Color(0xFFFF0000) else Color(0xFF400000)
 
@@ -232,18 +236,23 @@ fun NeedleDisplay(active: Boolean, frequency: Double, targetNote: Note, modifier
         }
 
         // Draw the needle
-        drawLine(
-            color = Color.Red,
-            start = Offset(size.width / 2, size.height),
-            end = Offset(
-                x = size.width / 2 + radius * kotlin.math.cos(Math.toRadians(180.0 - angle))
-                    .toFloat(),
-                y = size.height - radius * kotlin.math.sin(Math.toRadians(180.0 - angle))
-                    .toFloat()
-            ),
-            strokeWidth = needleWidth,
-            cap = StrokeCap.Round
-        )
+        try {
+            drawLine(
+                color = Color.Red,
+                start = Offset(size.width / 2, size.height),
+                end = Offset(
+                    x = size.width / 2 + radius * kotlin.math.cos(Math.toRadians(180.0 - angle))
+                        .toFloat(),
+                    y = size.height - radius * kotlin.math.sin(Math.toRadians(180.0 - angle))
+                        .toFloat()
+                ),
+                strokeWidth = needleWidth,
+                cap = StrokeCap.Round
+            )
+        } catch (e: Exception) {
+            Log.d("DRAW", angle.toString())
+        }
+
         drawCircle(
             color = Color.Black,
             radius = lineWidth,

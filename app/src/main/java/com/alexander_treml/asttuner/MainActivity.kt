@@ -125,8 +125,7 @@ val sideButtonSelectedMod = Modifier
 // TODO adjust splash screen color
 // TODO find out how to use theme correctly (text color seems to be chosen automatically if not specified)
 // TODO write tests or remove tests and test framework
-// TODO Deal with Logcat warnings
-// TODO haptic feedback
+// TODO deal with Logcat warnings
 class MainActivity : ComponentActivity() {
     private val listener = Listener(this)
     private val state: AppState by viewModels()
@@ -218,7 +217,6 @@ class MainActivity : ComponentActivity() {
 
             Button(
                 onClick = {
-                    // TODO check if it is possible to click UI elements behind the selection list
                     if (!state.editMode.value) state.selectMode.value = true
                 },
                 colors = ButtonDefaults.buttonColors(
@@ -563,13 +561,5 @@ class MainActivity : ComponentActivity() {
     }
 
     // TODO use onStop/onPause to stop animations etc.
-
-    // Preview
-    // TODO preview not working
-    @Preview
-    @Composable
-    fun AppPreview() {
-        MainPanel()
-    }
 }
 

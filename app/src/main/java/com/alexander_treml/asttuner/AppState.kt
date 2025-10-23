@@ -1,48 +1,66 @@
 package com.alexander_treml.asttuner
 
 import android.app.Application
+import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-// TODO savedStateHandle is recommended with ViewModel, but does not seem to make a difference when reopening the app from the background.
 class AppState(
     private val application: Application,
+    private val savedStateHandle: SavedStateHandle
 ) : AndroidViewModel(application) {
-    val autoMode = mutableStateOf(false)
-    val editMode = mutableStateOf(false)
-    val selectMode = mutableStateOf(false)
 
+    private val prefs = application.getSharedPreferences("app_state", Context.MODE_PRIVATE)
+
+    // Persistent values
+    val autoMode = mutableStateOf(
+        savedStateHandle["autoMode"] ?: prefs.getBoolean("autoMode", false)
+    )
+    val tuningName = mutableStateOf( // Name of selected tuning
+        savedStateHandle["tuningName"] ?: prefs.getString("tuningName", "Six String Standard")!!
+    )
+
+    val editMode = mutableStateOf(savedStateHandle["editMode"] ?: false)
+    val selectMode = mutableStateOf(savedStateHandle["selectMode"] ?: false)
     val tunings = mutableStateMapOf(Pair("Six String Standard", Tunings.standard))
-
-    // Current Tuning
-    val tuningName = mutableStateOf("Six String Standard")
     val tuning = mutableStateListOf(*(Tunings.standard.toTypedArray()))
-
-    // Index in the tuning of the currently selected note
-    val selectedIndex = mutableIntStateOf(0)
-
-    val editedName = mutableStateOf(tuningName.value)
+    val selectedIndex = mutableIntStateOf(savedStateHandle["selectedIndex"] ?: 0)
+    val editedName = mutableStateOf(savedStateHandle["editedName"] ?: tuningName.value)
 
     init {
+        // Observe all mutable states and update SavedStateHandle
+        observeState(autoMode, "autoMode", persist = true)
+        observeState(tuningName, "tuningName", persist = true)
+        observeState(editMode, "editMode")
+        observeState(selectMode, "selectMode")
+        observeState(selectedIndex, "selectedIndex")
+        observeState(editedName, "editedName")
+
+        // Load tunings
         viewModelScope.launch {
-            val loaded =
-            withContext(Dispatchers.IO) {
+            val loaded = withContext(Dispatchers.IO) {
                 Tunings.loadTunings(application.applicationContext)
             }
             if (loaded.isNotEmpty()) {
                 tunings.clear()
                 tunings.putAll(loaded)
             }
-            tuningName.value = tunings.keys.sorted()[0]
+
+            if (!tunings.containsKey(tuningName.value))
+                tuningName.value = tunings.keys.sorted()[0]
+
             editedName.value = tuningName.value
             tuning.clear()
             tuning.addAll(tunings[tuningName.value]!!)
@@ -113,7 +131,6 @@ class AppState(
 
         editMode.value = false
 
-        // TODO this is probably an inefficient way to do this
         // Write to disk
         Tunings.saveTunings(application.applicationContext, tunings)
     }
@@ -134,9 +151,29 @@ class AppState(
     fun deleteTuning(name: String) {
         tunings.remove(name)
 
-        // TODO this is probably an inefficient way to do this
         // Write to disk
         Tunings.saveTunings(application.applicationContext, tunings)
+    }
+
+    // Generic observer to save both to SavedStateHandle and optionally SharedPreferences
+    private fun <T> observeState(state: MutableState<T>, key: String, persist: Boolean = false) {
+        viewModelScope.launch {
+            snapshotFlow { state.value }.collect { value ->
+                savedStateHandle[key] = value
+                if (persist) saveToPrefs(key, value)
+            }
+        }
+    }
+
+    private fun <T> saveToPrefs(key: String, value: T) {
+        with(prefs.edit()) {
+            when (value) {
+                is Boolean -> putBoolean(key, value)
+                is String -> putString(key, value)
+                is Int -> putInt(key, value)
+            }
+            apply()
+        }
     }
 }
 

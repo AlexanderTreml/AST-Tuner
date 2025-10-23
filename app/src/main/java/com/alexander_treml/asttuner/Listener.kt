@@ -13,17 +13,24 @@ import kotlinx.coroutines.launch
 import org.apache.commons.math3.transform.DftNormalization
 import org.apache.commons.math3.transform.FastFourierTransformer
 import org.apache.commons.math3.transform.TransformType
+import kotlin.math.abs
 import kotlin.math.pow
+import kotlin.math.round
 
 private const val SAMPLE_RATE = 44100
-private const val THRESHOLD = 1000.0
+private const val ACTIVATION_THRESHOLD = 1000.0
+
+// How much a frequency bin can be below the maximum value to be selected. At 1 the maximum bin is always selected.
+// Lower values: better detection when multiple strings are ringing out (the algorithm will detect the most prominent frequency, instead of a common denominator)
+// Higher values: better distortion tolerance (the algorithm will detect the fundamental instead of harmonics)
+private const val DISTORTION_TOLERANCE = 0.9
 
 class Listener(owner: LifecycleOwner) : DefaultLifecycleObserver {
     init {
         owner.lifecycle.addObserver(this)
     }
 
-    // Output value
+    // Output values
     val frequency = MutableStateFlow(0.0)
     val active = MutableStateFlow(false)
 
@@ -62,20 +69,26 @@ class Listener(owner: LifecycleOwner) : DefaultLifecycleObserver {
 
                 val maxIndex = maxima.value.maxByOrNull { magnitudes[it] } ?: -1
 
-                active.value = maxIndex != -1 && magnitudes[maxIndex] >= THRESHOLD
+                active.value = maxIndex != -1 && magnitudes[maxIndex] >= ACTIVATION_THRESHOLD
                 if (!active.value) {
                     frequency.value = 0.0
                     continue
                 }
 
-                val a = magnitudes[maxIndex - 1]
-                val b = magnitudes[maxIndex]
-                val c = magnitudes[maxIndex + 1]
+                val maxVal = magnitudes[maxIndex]
+                val estIdx = maxima.value.firstOrNull { magnitudes[it] >= DISTORTION_TOLERANCE * maxVal } ?: -1
+                if (estIdx == -1) {
+                    continue
+                }
+
+                val a = magnitudes[estIdx - 1]
+                val b = magnitudes[estIdx]
+                val c = magnitudes[estIdx + 1]
 
                 val peakEstimate = if ((a - 2 * b + c) != 0.0) {
-                    (1.0 / 2.0) * (a - c) / (a - 2 * b + c) + maxIndex
+                    (1.0 / 2.0) * (a - c) / (a - 2 * b + c) + estIdx
                 } else {
-                    0.0 + maxIndex
+                    0.0 + estIdx
                 }
 
                 frequency.value = SAMPLE_RATE / peakEstimate
