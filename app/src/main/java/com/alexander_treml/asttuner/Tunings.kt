@@ -73,6 +73,10 @@ object Tunings : Serializer<StoredTunings> {
                 return Result.failure()
             }
         }
+
+        override suspend fun getForegroundInfo(): ForegroundInfo {
+            return super.getForegroundInfo()
+        }
     }
 
     override val defaultValue: StoredTunings

@@ -25,6 +25,7 @@ class Listener(owner: LifecycleOwner) : DefaultLifecycleObserver {
 
     // Output value
     val frequency = MutableStateFlow(0.0)
+    val active = MutableStateFlow(false)
 
     // Debugging values
     val autocorrelationValues: MutableStateFlow<List<Double>> = MutableStateFlow(emptyList())
@@ -61,8 +62,8 @@ class Listener(owner: LifecycleOwner) : DefaultLifecycleObserver {
 
                 val maxIndex = maxima.value.maxByOrNull { magnitudes[it] } ?: -1
 
-                // TODO display that the signal amplitude is too low
-                if (maxIndex == -1 || magnitudes[maxIndex] < THRESHOLD) {
+                active.value = maxIndex != -1 && magnitudes[maxIndex] >= THRESHOLD
+                if (!active.value) {
                     frequency.value = 0.0
                     continue
                 }

@@ -28,12 +28,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
 import com.alexander_treml.asttuner.ui.theme.silverBrush
 import kotlinx.coroutines.delay
@@ -48,6 +51,7 @@ private const val AUTO_DELAY = 500L
 // TODO maybe use Listener/AppState singleton instead of passing it here?
 @Composable
 fun FrequencyDisplay(listener: Listener, state: AppState, modifier: Modifier = Modifier) {
+    val active by listener.active.collectAsState()
     val frequency by listener.frequency.collectAsState()
     val targetNote = state.tuning[state.selectedIndex.intValue]
     var debugMode by remember { mutableStateOf(false) }
@@ -91,6 +95,7 @@ fun FrequencyDisplay(listener: Listener, state: AppState, modifier: Modifier = M
             exit = slideOutHorizontally { -it }
         ) {
             NeedleDisplay(
+                active = active,
                 frequency = frequency,
                 targetNote = targetNote,
                 modifier = Modifier.offset(x = animatedOffsetX.dp)
@@ -146,7 +151,7 @@ fun NoteDetector(frequency: Double, state: AppState) {
 }
 
 @Composable
-fun NeedleDisplay(frequency: Double, targetNote: Note, modifier: Modifier = Modifier) {
+fun NeedleDisplay(active: Boolean, frequency: Double, targetNote: Note, modifier: Modifier = Modifier) {
     val lineWidth = 10f
     val needleWidth = 8f
     val padding = 32f
@@ -167,6 +172,29 @@ fun NeedleDisplay(frequency: Double, targetNote: Note, modifier: Modifier = Modi
     ) {
         val offset = lineWidth / 2 + padding
         val radius = min(size.height, size.width / 2f) - offset
+
+        // Draw indicator LED
+        val ledRadius = 16f
+        val ledCenter = Offset(x = offset + radius + (radius / 2) * kotlin.math.cos(Math.toRadians(135.0)).toFloat(), y = offset + radius - (radius / 2) * kotlin.math.sin(Math.toRadians(135.0)).toFloat())
+        val ledColor = if (active) Color(0xFFFF0000) else Color(0xFF400000)
+
+        drawCircle(
+            color = Color.Black,
+            radius = ledRadius,
+            center = ledCenter
+        )
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    ledColor.copy(alpha = if (active) 1f else 0.5f),
+                    ledColor.copy(alpha = 0.0f)
+                ),
+                center = ledCenter,
+                radius = ledRadius
+            ),
+            radius = ledRadius,
+            center = ledCenter
+        )
 
         // Draw center line
         drawLine(
@@ -294,4 +322,10 @@ fun DebugView(listener: Listener, targetFrequency: Double, modifier: Modifier = 
             }
         }
     }
+}
+
+@Preview(widthDp = 200, heightDp = 400)
+@Composable
+fun NeedleDisplayPreview() {
+    NeedleDisplay(active = true, frequency = 440.0, targetNote = Note.new(0))
 }
